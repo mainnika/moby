@@ -1,0 +1,119 @@
+From b67ec54924e4d15eb0607772edf764cd143248a5 Mon Sep 17 00:00:00 2001
+From: Nikita Tokarchuk <tokarchuk+bitbucket@nevisq.com>
+Date: Mon, 2 Mar 2020 16:41:23 +0100
+Subject: [PATCH] force userns in the archive package
+
+---
+ daemon/graphdriver/overlay2/overlay.go | 2 --
+ pkg/archive/archive.go                 | 3 +--
+ pkg/archive/diff.go                    | 4 ++--
+ pkg/chrootarchive/diff_unix.go         | 9 ---------
+ 4 files changed, 3 insertions(+), 15 deletions(-)
+
+diff --git a/daemon/graphdriver/overlay2/overlay.go b/daemon/graphdriver/overlay2/overlay.go
+index 6da1f25a34..aa67a993cf 100644
+--- a/daemon/graphdriver/overlay2/overlay.go
++++ b/daemon/graphdriver/overlay2/overlay.go
+@@ -32,7 +32,6 @@ import (
+ 	"github.com/docker/docker/pkg/parsers/kernel"
+ 	"github.com/docker/docker/pkg/system"
+ 	"github.com/docker/go-units"
+-	rsystem "github.com/opencontainers/runc/libcontainer/system"
+ 	"github.com/opencontainers/selinux/go-selinux/label"
+ 	"github.com/sirupsen/logrus"
+ 	"golang.org/x/sys/unix"
+@@ -721,7 +720,6 @@ func (d *Driver) ApplyDiff(id string, parent string, diff io.Reader) (size int64
+ 		UIDMaps:        d.uidMaps,
+ 		GIDMaps:        d.gidMaps,
+ 		WhiteoutFormat: archive.OverlayWhiteoutFormat,
+-		InUserNS:       rsystem.RunningInUserNS(),
+ 	}); err != nil {
+ 		return 0, err
+ 	}
+diff --git a/pkg/archive/archive.go b/pkg/archive/archive.go
+index 070dccb756..9d43cc0979 100644
+--- a/pkg/archive/archive.go
++++ b/pkg/archive/archive.go
+@@ -64,7 +64,6 @@ type (
+ 		// For each include when creating an archive, the included name will be
+ 		// replaced with the matching name from this map.
+ 		RebaseNames map[string]string
+-		InUserNS    bool
+ 	}
+ )
+ 
+@@ -993,7 +992,7 @@ loop:
+ 			}
+ 		}
+ 
+-		if err := createTarFile(path, dest, hdr, trBuf, !options.NoLchown, options.ChownOpts, options.InUserNS); err != nil {
++		if err := createTarFile(path, dest, hdr, trBuf, !options.NoLchown, options.ChownOpts, true); err != nil {
+ 			return err
+ 		}
+ 
+diff --git a/pkg/archive/diff.go b/pkg/archive/diff.go
+index 6883ba1326..abf7902ae8 100644
+--- a/pkg/archive/diff.go
++++ b/pkg/archive/diff.go
+@@ -105,7 +105,7 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
+ 					}
+ 					defer os.RemoveAll(aufsTempdir)
+ 				}
+-				if err := createTarFile(filepath.Join(aufsTempdir, basename), dest, hdr, tr, true, nil, options.InUserNS); err != nil {
++				if err := createTarFile(filepath.Join(aufsTempdir, basename), dest, hdr, tr, true, nil, true); err != nil {
+ 					return 0, err
+ 				}
+ 			}
+@@ -196,7 +196,7 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
+ 				return 0, err
+ 			}
+ 
+-			if err := createTarFile(path, dest, srcHdr, srcData, true, nil, options.InUserNS); err != nil {
++			if err := createTarFile(path, dest, srcHdr, srcData, true, nil, true); err != nil {
+ 				return 0, err
+ 			}
+ 
+diff --git a/pkg/chrootarchive/diff_unix.go b/pkg/chrootarchive/diff_unix.go
+index d96a09f8fa..fd37056daa 100644
+--- a/pkg/chrootarchive/diff_unix.go
++++ b/pkg/chrootarchive/diff_unix.go
+@@ -16,7 +16,6 @@ import (
+ 	"github.com/docker/docker/pkg/archive"
+ 	"github.com/docker/docker/pkg/reexec"
+ 	"github.com/docker/docker/pkg/system"
+-	rsystem "github.com/opencontainers/runc/libcontainer/system"
+ )
+ 
+ type applyLayerResponse struct {
+@@ -36,7 +35,6 @@ func applyLayer() {
+ 	runtime.LockOSThread()
+ 	flag.Parse()
+ 
+-	inUserns := rsystem.RunningInUserNS()
+ 	if err := chroot(flag.Arg(0)); err != nil {
+ 		fatal(err)
+ 	}
+@@ -52,10 +50,6 @@ func applyLayer() {
+ 		fatal(err)
+ 	}
+ 
+-	if inUserns {
+-		options.InUserNS = true
+-	}
+-
+ 	if tmpDir, err = ioutil.TempDir("/", "temp-docker-extract"); err != nil {
+ 		fatal(err)
+ 	}
+@@ -95,9 +89,6 @@ func applyLayerHandler(dest string, layer io.Reader, options *archive.TarOptions
+ 	}
+ 	if options == nil {
+ 		options = &archive.TarOptions{}
+-		if rsystem.RunningInUserNS() {
+-			options.InUserNS = true
+-		}
+ 	}
+ 	if options.ExcludePatterns == nil {
+ 		options.ExcludePatterns = []string{}
+-- 
+2.21.0 (Apple Git-122.2)
+
