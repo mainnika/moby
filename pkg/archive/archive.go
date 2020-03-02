@@ -64,7 +64,6 @@ type (
 		// For each include when creating an archive, the included name will be
 		// replaced with the matching name from this map.
 		RebaseNames map[string]string
-		InUserNS    bool
 	}
 )
 
@@ -993,7 +992,7 @@ loop:
 			}
 		}
 
-		if err := createTarFile(path, dest, hdr, trBuf, !options.NoLchown, options.ChownOpts, options.InUserNS); err != nil {
+		if err := createTarFile(path, dest, hdr, trBuf, !options.NoLchown, options.ChownOpts, true); err != nil {
 			return err
 		}
 
